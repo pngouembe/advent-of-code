@@ -159,6 +159,7 @@ dependencies = [
  "itertools",
  "miette",
  "nom",
+ "regex",
  "thiserror",
  "tracing",
  "tracing-subscriber",

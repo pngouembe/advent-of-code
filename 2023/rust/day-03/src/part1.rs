@@ -1,85 +1,77 @@
+use regex::Regex;
+use std::collections::HashMap;
+
 use crate::custom_error::AocError;
-use std::cmp;
 
 #[derive(Debug)]
-struct SearchArea {
-    pub min_x: usize,
-    pub max_x: usize,
-    pub min_y: usize,
-    pub max_y: usize,
+struct Number {
+    pub x: u32,
+    pub y: u32,
+    pub value: String,
 }
 
-fn symbol_in_search_area(search_area: &SearchArea, lines: &[&str]) -> bool {
-    let search_area = dbg!(search_area);
-    for line_index in search_area.min_y..=search_area.max_y {
-        for colomun_index in search_area.min_x..=search_area.max_x {
-            let char: char = lines[line_index]
-                .chars()
-                .nth(colomun_index)
-                .expect("Char should exist");
-
-            if !char.is_numeric() && char != '.' {
-                return true;
-            }
-        }
-    }
-
-    false
-}
 #[tracing::instrument]
 pub fn process(input: &str) -> miette::Result<String, AocError> {
     let mut result = 0;
-    let lines: Vec<_> = input.lines().collect();
+    let (symbols, numbers) = parse_input(input);
 
-    for (line_index, line) in lines.iter().enumerate() {
-        let mut part_number = String::new();
-        let mut previous_char_is_numeric = false;
-
-        let mut search_area = SearchArea {
-            min_x: 0,
-            max_x: 0,
-            min_y: line_index.saturating_sub(1),
-            max_y: cmp::min(line_index + 1, lines.len()),
-        };
-
-        for (colomn_index, char) in line.chars().enumerate() {
-            let mut should_check_number = match (char.is_numeric(), previous_char_is_numeric) {
-                // First number found
-                (true, false) => {
-                    search_area.min_x = colomn_index.saturating_sub(1);
-                    part_number.push(char);
-                    previous_char_is_numeric = true;
-                    false
-                }
-                // Last number found
-                (false, true) => {
-                    search_area.max_x = cmp::min(colomn_index, line.len());
-                    previous_char_is_numeric = false;
-                    true
-                }
-                // In a number
-                (true, true) => {
-                    part_number.push(char);
-                    false
-                }
-                // Not in a number
-                (false, false) => false,
-            };
-
-            if colomn_index == line.len() {
-                should_check_number = true;
-            }
-
-            if should_check_number && symbol_in_search_area(&search_area, &lines) {
-                result += part_number
-                    .parse::<u32>()
-                    .expect("The part number should be a valid number");
-                part_number = String::new();
-            }
+    for number in numbers.iter() {
+        if is_part_number(number, &symbols) {
+            result += number.value.parse::<u32>().unwrap();
         }
     }
 
     Ok(result.to_string())
+}
+
+fn parse_input(input: &str) -> (HashMap<(u32, u32), String>, Vec<Number>) {
+    let mut symbols = HashMap::new();
+    let mut numbers = Vec::new();
+
+    let number_regex = Regex::new(r"\d+").unwrap();
+    let symbol_regex = Regex::new(r"[^.\d]").unwrap();
+
+    for (y, line) in input.lines().enumerate() {
+        for symbol in symbol_regex.find_iter(line) {
+            symbols.insert(
+                (symbol.start() as u32, y as u32),
+                symbol.as_str().to_string(),
+            );
+        }
+
+        for number in number_regex.find_iter(line) {
+            numbers.push(Number {
+                x: number.start() as u32,
+                y: y as u32,
+                value: number.as_str().to_string(),
+            });
+        }
+    }
+    (symbols, numbers)
+}
+
+fn is_part_number(number: &Number, symbols: &HashMap<(u32, u32), String>) -> bool {
+    let search_coordonates: Vec<(u32, u32)> = get_search_coordonates(number);
+
+    for (x, y) in search_coordonates.iter() {
+        if symbols.get(&(*x, *y)).is_some() {
+            println!("number {} is a part number", number.value);
+            return true;
+        }
+    }
+    false
+}
+
+fn get_search_coordonates(number: &Number) -> Vec<(u32, u32)> {
+    let mut coordinates = Vec::new();
+
+    // Todo: improve this to not search useless coordinates
+    for x in number.x.saturating_sub(1)..=(number.x + number.value.len() as u32) {
+        for y in number.y.saturating_sub(1)..=number.y + 1 {
+            coordinates.push((x, y));
+        }
+    }
+    coordinates
 }
 
 #[cfg(test)]
